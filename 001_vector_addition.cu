@@ -1,56 +1,130 @@
-#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 #include <cuda_runtime.h>
 
-__global__ void vectorAdd(const float* A , const float *B, float *C, int N){
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;    
-    // so blockIdx.x -> is the ID of thread
-    // block dim = the size of the window we work on it
-    // threaidx =
-    if (idx<N){
-        C[idx] = A[idx] + B[idx];
+#define N 10000000  // Vector size = 10 million
+#define BLOCK_SIZE 256
+
+// Example:
+// A = [1, 2, 3, 4, 5]
+// B = [6, 7, 8, 9, 10]
+// C = A + B = [7, 9, 11, 13, 15]
+
+// CPU vector addition
+void vector_add_cpu(float *a, float *b, float *c, int n) {
+    for (int i = 0; i < n; i++) {
+        c[i] = a[i] + b[i];
     }
 }
 
-int main(){
-    const int N = 1024; // elements in vec
-    const int size = N * sizeof(int); // total size of vectors in bytes
+// CUDA kernel for vector addition
+__global__ void vector_add_gpu(float *a, float *b, float *c, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        c[i] = a[i] + b[i];
+    }
+}
 
-    float *h_A = new float[N];
-    float *h_B = new float[N];
-    float *h_C = new float[N];
+// Initialize vector with random values
+void init_vector(float *vec, int n) {
+    for (int i = 0; i < n; i++) {
+        vec[i] = (float)rand() / RAND_MAX;
+    }
+}
 
-    for(int i = 0 ;i <N;i++){
-        h_A[i] = 1;
-        h_B[i] = i;
+// Function to measure execution time
+double get_time() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
+
+int main() {
+    float *h_a, *h_b, *h_c_cpu, *h_c_gpu;
+    float *d_a, *d_b, *d_c;
+    size_t size = N * sizeof(float);
+
+    // Allocate host memory
+    h_a = (float*)malloc(size);
+    h_b = (float*)malloc(size);
+    h_c_cpu = (float*)malloc(size);
+    h_c_gpu = (float*)malloc(size);
+
+    // Initialize vectors
+    srand(time(NULL));
+    init_vector(h_a, N);
+    init_vector(h_b, N);
+
+    // Allocate device memory
+    cudaMalloc(&d_a, size);
+    cudaMalloc(&d_b, size);
+    cudaMalloc(&d_c, size);
+
+    // Copy data to device
+    cudaMemcpy(d_a, h_a, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_b, h_b, size, cudaMemcpyHostToDevice);
+
+    // Define grid and block dimensions
+    int num_blocks = (N + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    // N = 1024, BLOCK_SIZE = 256, num_blocks = 4
+    // (N + BLOCK_SIZE - 1) / BLOCK_SIZE = ( (1025 + 256 - 1) / 256 ) = 1280 / 256 = 4 rounded 
+
+    // Warm-up runs
+    printf("Performing warm-up runs...\n");
+    for (int i = 0; i < 3; i++) {
+        vector_add_cpu(h_a, h_b, h_c_cpu, N);
+        vector_add_gpu<<<num_blocks, BLOCK_SIZE>>>(d_a, d_b, d_c, N);
+        cudaDeviceSynchronize();
     }
 
-    float *d_A, *d_B,*d_C;
-
-    cudaMalloc((void**)&d_A,size);
-    cudaMalloc((void**)&d_B,size);
-    cudaMalloc((void**)&d_C,size);
-
-    // copy input data from host to device:
-    cudaMemcpy(d_A,h_A,size,cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B,h_B,size,cudaMemcpyHostToDevice);
-
-    int threadsPerBlock = 256;
-    int blocksPerGrid = ( N + threadsPerBlock -1) / threadsPerBlock;
-
-    vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(d_A,d_B,d_C,N);
-
-    cudaMemcpy(h_C,d_C,size,cudaMemcpyDeviceToHost);
-    for(int i =N-10;i<N;i++){
-        std::cout << "C[" << i << "] = " << h_C[i] << std::endl;
+    // Benchmark CPU implementation
+    printf("Benchmarking CPU implementation...\n");
+    double cpu_total_time = 0.0;
+    for (int i = 0; i < 20; i++) {
+        double start_time = get_time();
+        vector_add_cpu(h_a, h_b, h_c_cpu, N);
+        double end_time = get_time();
+        cpu_total_time += end_time - start_time;
     }
+    double cpu_avg_time = cpu_total_time / 20.0;
 
-    cudaFree(d_A);
-    cudaFree(d_B);
-    cudaFree(d_C);
+    // Benchmark GPU implementation
+    printf("Benchmarking GPU implementation...\n");
+    double gpu_total_time = 0.0;
+    for (int i = 0; i < 20; i++) {
+        double start_time = get_time();
+        vector_add_gpu<<<num_blocks, BLOCK_SIZE>>>(d_a, d_b, d_c, N);
+        cudaDeviceSynchronize();
+        double end_time = get_time();
+        gpu_total_time += end_time - start_time;
+    }
+    double gpu_avg_time = gpu_total_time / 20.0;
 
-    delete[] h_A; 
-    delete[] h_B; 
-    delete[] h_C; 
+    // Print results
+    printf("CPU average time: %f milliseconds\n", cpu_avg_time*1000);
+    printf("GPU average time: %f milliseconds\n", gpu_avg_time*1000);
+    printf("Speedup: %fx\n", cpu_avg_time / gpu_avg_time);
 
-    return 0; 
+    // Verify results (optional)
+    cudaMemcpy(h_c_gpu, d_c, size, cudaMemcpyDeviceToHost);
+    bool correct = true;
+    for (int i = 0; i < N; i++) {
+        if (fabs(h_c_cpu[i] - h_c_gpu[i]) > 1e-5) {
+            correct = false;
+            break;
+        }
+    }
+    printf("Results are %s\n", correct ? "correct" : "incorrect");
+
+    // Free memory
+    free(h_a);
+    free(h_b);
+    free(h_c_cpu);
+    free(h_c_gpu);
+    cudaFree(d_a);
+    cudaFree(d_b);
+    cudaFree(d_c);
+
+    return 0;
 }
