@@ -21,5 +21,9 @@ This repository contains small CUDA / GPU exercise implementations and notes. Be
 - 2025-12-05
   - Implemented matrix multiplication as part of exercise 3.1 (PMPP) and compared execution times of element-wise kernel, row-wise and column-wise kernel with cpu execution times.
   - PMPP CH. 4 (ongoing), GPU_MODE Session 4.
-  
- 
+
+- 2025-12-06
+ - PMPP Ch. 4 completed with notes and exercises, GPU_MODE Session 4 (ongoing), started reading PMPP Ch.5
+
+- 2025-12-07
+ - PMPP Ch. 5 (ongoing), Tiled Matrix multiplication kernel (without boundary checks), GPU_MODE Session 4 comleted.

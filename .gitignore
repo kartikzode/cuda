@@ -1,3 +1,4 @@
-*/tmp*/*
-cuda_build/
+**/tmp/
+**/cuda_build/
+.vscode/
 log.md
