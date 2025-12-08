@@ -6,7 +6,7 @@
 #define M 1024  // number of rows in A & C
 #define K 1000  // number of columns in A and number of rows in B
 #define N 1024 // number of columns in B & C
-#define TILE_WIDTH 64
+#define TILE_WIDTH 32
 
 // CPU matrix multiplication
 void matmul_cpu(float* A, float* B, float* C, int m, int k, int n) {
@@ -105,6 +105,10 @@ int main() {
     for (int i = 0; i < 3; i++) {
         // matmul_cpu(h_A, h_B, h_C_cpu, M, K, N);
         matmul_tile<<<gridDim, blockDim>>>(d_A, d_B, d_C, M);
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("CUDA Error: %s\n", cudaGetErrorString(err));
+        }
         cudaDeviceSynchronize();
     }
 
@@ -125,6 +129,10 @@ int main() {
     for (int i = 0; i < 20; i++) {
         double start_time = get_time();
         matmul_tile<<<gridDim, blockDim>>>(d_A, d_B, d_C, M);
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("CUDA Error: %s\n", cudaGetErrorString(err));
+        }
         cudaDeviceSynchronize();
         double end_time = get_time();
         gpu_total_time += end_time - start_time;
