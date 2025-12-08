@@ -4,9 +4,9 @@
 #include <cuda_runtime.h>
 
 #define M 1024  // number of rows in A & C
-#define K 1024  // number of columns in A and number of rows in B
+#define K 1000  // number of columns in A and number of rows in B
 #define N 1024 // number of columns in B & C
-#define TILE_WIDTH 32 
+#define TILE_WIDTH 64
 
 // CPU matrix multiplication
 void matmul_cpu(float* A, float* B, float* C, int m, int k, int n) {
@@ -37,11 +37,11 @@ void matmul_tile( float* A, float * B, float* C, int Width) {
 
     // Loop over the A and B tiles required to compute C elements
     float value = 0.0;
-    for(int ph = 0; ph < Width/TILE_WIDTH; ++ph) {
+    for(int ph = 0; ph < ceil(Width/(float) TILE_WIDTH); ++ph) {
         
         // Collaborative loading of A and B tiles into Shares Memory
-        Ads[ty][tx] = A[row*Width + ph*TILE_WIDTH + tx]; 
-        Bds[ty][tx] = B[(ph*TILE_WIDTH + ty)*Width + col];
+        Ads[ty][tx] =  (((row < Width) && ((ph*TILE_WIDTH + tx) < Width)) ? A[row*Width + ph*TILE_WIDTH + tx] : 0.f);
+        Bds[ty][tx] = ((((ph*TILE_WIDTH + ty) < Width) && (col < Width)) ? B[(ph*TILE_WIDTH + ty)*Width + col] : 0.f);
         __syncthreads();
 
         for(int k=0; k < TILE_WIDTH; k++) {
@@ -49,7 +49,10 @@ void matmul_tile( float* A, float * B, float* C, int Width) {
         }
         __syncthreads();
     }
-    C[row*Width + col] = value;
+    if (row < Width && col < Width) {
+        C[row*Width + col] = value;
+    }
+    
 }
 
 // Initialize matrix with random values
@@ -100,21 +103,21 @@ int main() {
     // Warm-up runs
     printf("Performing warm-up runs...\n");
     for (int i = 0; i < 3; i++) {
-        matmul_cpu(h_A, h_B, h_C_cpu, M, K, N);
+        // matmul_cpu(h_A, h_B, h_C_cpu, M, K, N);
         matmul_tile<<<gridDim, blockDim>>>(d_A, d_B, d_C, M);
         cudaDeviceSynchronize();
     }
 
-    // Benchmark CPU implementation
-    printf("Benchmarking CPU implementation...\n");
-    double cpu_total_time = 0.0;
-    for (int i = 0; i < 20; i++) {
-        double start_time = get_time();
-        matmul_cpu(h_A, h_B, h_C_cpu, M, K, N);
-        double end_time = get_time();
-        cpu_total_time += end_time - start_time;
-    }
-    double cpu_avg_time = cpu_total_time / 20.0;
+    // // Benchmark CPU implementation
+    // printf("Benchmarking CPU implementation...\n");
+    // double cpu_total_time = 0.0;
+    // for (int i = 0; i < 20; i++) {
+    //     double start_time = get_time();
+    //     matmul_cpu(h_A, h_B, h_C_cpu, M, K, N);
+    //     double end_time = get_time();
+    //     cpu_total_time += end_time - start_time;
+    // }
+    // double cpu_avg_time = cpu_total_time / 20.0;
 
     // Benchmark GPU implementation
     printf("Benchmarking GPU implementation...\n");
@@ -129,9 +132,9 @@ int main() {
     double gpu_avg_time = gpu_total_time / 20.0;
 
     // Print results
-    printf("CPU average time: %f microseconds\n", (cpu_avg_time * 1e6f));
+    // printf("CPU average time: %f microseconds\n", (cpu_avg_time * 1e6f));
     printf("GPU average time: %f microseconds\n", (gpu_avg_time * 1e6f));
-    printf("Speedup: %fx\n", cpu_avg_time / gpu_avg_time);
+    // printf("Speedup: %fx\n", cpu_avg_time / gpu_avg_time);
 
     // Free memory
     free(h_A);

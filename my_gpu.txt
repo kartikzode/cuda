@@ -50,5 +50,8 @@ total_memory=4095MB, multi_processor_count=16,
 uuid=6c6ab61b-0404-b58e-e27e-8e2b35169240, pci_bus_id=1, pci_device_id=0, 
 pci_domain_id=0, L2_cache_size=1MB)
 
-NVIDIA GeForce GTX 1650 has 16 SMs with 64 cores each, 
-totalling 1024 cores in the entire GPU.
+NVIDIA GeForce GTX 1650 
+has 16 SMs with 64 cores each totalling 1024 cores in the entire GPU.
+has shared_memory_per_block = 49152 B
+has shared_memory_per_multiprocessor = 65536 B
+It can handle maximum of 1024 threads per SM, so 64 Bytes per thread.

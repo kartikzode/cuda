@@ -2,3 +2,4 @@
 **/cuda_build/
 .vscode/
 log.md
+gpu_mode_notes/

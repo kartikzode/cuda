@@ -23,7 +23,7 @@ This repository contains small CUDA / GPU exercise implementations and notes. Be
   - PMPP CH. 4 (ongoing), GPU_MODE Session 4.
 
 - 2025-12-06
- - PMPP Ch. 4 completed with notes and exercises, GPU_MODE Session 4 (ongoing), started reading PMPP Ch.5
+  - PMPP Ch. 4 completed with notes and exercises, GPU_MODE Session 4 (ongoing), started reading PMPP Ch.5
 
 - 2025-12-07
- - PMPP Ch. 5 (ongoing), Tiled Matrix multiplication kernel (without boundary checks), GPU_MODE Session 4 comleted.
+  - PMPP Ch. 5 (ongoing), Tiled Matrix multiplication kernel (without boundary checks), GPU_MODE Session 4 comleted.
