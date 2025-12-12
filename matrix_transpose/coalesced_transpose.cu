@@ -2,30 +2,60 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Define the size of the matrix
 #define WIDTH 1024
 #define HEIGHT 1024
 #define TILE_DIM 32
 #define BLOCK_ROWS 8
 
-__global__ void transposeCoalesced(float *odata, const float *idata, int width, int height)
-{
-  __shared__ float tile[TILE_DIM][TILE_DIM];
-    
-  int x = blockIdx.x * TILE_DIM + threadIdx.x;
-  int y = blockIdx.y * TILE_DIM + threadIdx.y;
+// CUDA kernel for coalesced matrix transposition
+__global__ void transposeMatrix(const float* input, float* output, int width, int height) {
 
-  for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
-     tile[threadIdx.y+j][threadIdx.x] = idata[(y+j)*width + x];
+    __shared__ float tile [TILE_DIM] [TILE_DIM + 1];
 
-  __syncthreads();
+    int x = blockIdx.x * TILE_DIM + threadIdx.x;
+    int y = blockIdx.y * TILE_DIM  + threadIdx.y;
 
-  x = blockIdx.y * TILE_DIM + threadIdx.x;  // transpose block offset
-  y = blockIdx.x * TILE_DIM + threadIdx.y;
+    for (int i = 0; i < TILE_DIM; i+= BLOCK_ROWS) {
+        
+        tile[threadIdx.y + i][threadIdx.x] = input[(y+i) * width + x];
+    }
+    __syncthreads();
 
-  for (int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
-     odata[(y+j)*width + x] = tile[threadIdx.x][threadIdx.y + j];
+    //transpose block offset
+    x = blockIdx.y * TILE_DIM + threadIdx.x;
+    y = blockIdx.x * TILE_DIM + threadIdx.y;
+
+    // write to output
+    for (int j = 0; j < TILE_DIM; j+= BLOCK_ROWS) {
+        output[(y+j)*width + x] = tile[threadIdx.x][threadIdx.y + j];
+    }
+
+
 }
+
+// kernel with tile size equal to block sizwe
+__global__ void matrix_transpose_kernel(const float* input, float* output, int rows, int cols) {
+
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    __shared__ float tile [TILE_DIM] [TILE_DIM];
+
+    if (x < cols && y < rows) {
+        tile[threadIdx.y][threadIdx.x] = input[y*cols + x];
+    } 
+    
+    __syncthreads();
+
+    //transpose offset
+    x = blockIdx.y * blockDim.x + threadIdx.x;
+    y = blockIdx.x * blockDim.y + threadIdx.y;
+
+    if (x < rows && y < cols) {
+        output[y*rows + x] = tile [threadIdx.x][threadIdx.y];
+    }
+}
+
 
 // Host function to check for CUDA errors
 static void check(cudaError_t err, const char* msg) {
@@ -60,13 +90,37 @@ int main() {
     check(cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice), "Failed to copy input data to device");
 
     // Define block and grid sizes
-    dim3 blockSize(TILE_DIM, BLOCK_ROWS, 1);
-    dim3 gridSize((width / TILE_DIM), (height / TILE_DIM), 1);
+    dim3 blockSize(TILE_DIM, BLOCK_ROWS);
+    dim3 gridSize((width + TILE_DIM - 1) / TILE_DIM, (height + TILE_DIM - 1) / TILE_DIM);
+
+    // // Define block and grid sizes
+    // dim3 blockSize(TILE_DIM, TILE_DIM);
+    // dim3 gridSize((width + TILE_DIM - 1) / TILE_DIM, (height + TILE_DIM - 1) / TILE_DIM);
 
     // Launch the kernel
-    transposeCoalesced<<<gridSize, blockSize>>>(d_input, d_output, width, height);
+    transposeMatrix<<<gridSize, blockSize>>>(d_input, d_output, width, height);
     check(cudaGetLastError(), "Kernel launch failed");
     check(cudaDeviceSynchronize(), "Kernel sync");
+
+    // Copy the result back to the host
+    check(cudaMemcpy(h_output, d_output, size, cudaMemcpyDeviceToHost), "Failed to copy output data to host");
+
+    // Verify the result
+    bool success = true;
+    for (int i = 0; i < width; i++) {
+        for (int j = 0; j < height; j++) {
+            if (h_output[i * height + j] != h_input[j * width + i]) {
+                success = false;
+                break;
+            }
+        }
+    }
+    if (success) {
+        printf("Matrix transposition successful!\n");
+    } else {
+        printf("Matrix transposition failed!\n");
+    }
+
 
 
     // Free device memory

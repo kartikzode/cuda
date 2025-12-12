@@ -2,23 +2,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Define the size of the matrix
+
 #define WIDTH 1024
 #define HEIGHT 1024
+#define TILE_DIM 32
+#define BLOCK_ROWS 8
 
 // CUDA kernel for matrix transposition
 __global__ void transposeMatrix(const float* input, float* output, int width, int height) {
-    // Calculate the row and column index of the element
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    // Perform the transposition if within bounds
-    if (x < width && y < height) {
-        int inputIndex = y * width + x;
-        int outputIndex = x * height + y;
-        output[outputIndex] = input[inputIndex];
+    int x = blockIdx.x * TILE_DIM + threadIdx.x;
+    int y = blockIdx.y * TILE_DIM  + threadIdx.y;
+
+    for (int i = 0; i < TILE_DIM; i+= BLOCK_ROWS) {
+        
+        output [x* width + (y+i)] = input[(y+i) * width + x];
     }
 }
+
+// block size is equal to tile size
+__global__ void naive_cuda_transpose(int m, float *a, float *c, int width, int height)
+{
+    int col = blockDim.x * blockIdx.x + threadIdx.x;
+    int row = blockDim.y * blockIdx.y + threadIdx.y;
+
+    if( row < m && col < m ){
+        c[height*width + row] = a[row * width + height];
+    }
+} 
+
 
 // Host function to check for CUDA errors
 static void check(cudaError_t err, const char* msg) {
@@ -53,8 +65,13 @@ int main() {
     check(cudaMemcpy(d_input, h_input, size, cudaMemcpyHostToDevice), "Failed to copy input data to device");
 
     // Define block and grid sizes
-    dim3 blockSize(32, 32);
-    dim3 gridSize((width + blockSize.x - 1) / blockSize.x, (height + blockSize.y - 1) / blockSize.y);
+    dim3 blockSize(TILE_DIM, BLOCK_ROWS);
+    dim3 gridSize((width + TILE_DIM - 1) / TILE_DIM, (height + TILE_DIM - 1) / TILE_DIM);
+
+    // // Define block and grid sizes
+    // dim3 blockSize(TILE_DIM, TILE_DIM);
+    // dim3 gridSize((width + TILE_DIM - 1) / TILE_DIM, (height + TILE_DIM - 1) / TILE_DIM);
+
 
     // Launch the kernel
     transposeMatrix<<<gridSize, blockSize>>>(d_input, d_output, width, height);
