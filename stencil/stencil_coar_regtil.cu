@@ -35,9 +35,10 @@ float h_c6 = 0.05f;
 
 __global__ void stencilTiled(float* u_in, float* u_out, int N) {
     // Input tile with halo cells
-        __shared__ float in_prev[IN_TILE_DIM][IN_TILE_DIM];
-        __shared__ float in_curr[IN_TILE_DIM][IN_TILE_DIM];
-        __shared__ float in_next[IN_TILE_DIM][IN_TILE_DIM];
+        float in_prev;
+        float in_curr;
+        __shared__ float in_curr_s[IN_TILE_DIM][IN_TILE_DIM];
+        float in_next;
     
     // Thread indices within the block
     int tx = threadIdx.x;
@@ -49,11 +50,12 @@ __global__ void stencilTiled(float* u_in, float* u_out, int N) {
     int k_start = blockIdx.z * OUT_TILE_DIM;
     
     if (i >= 0 && i < N && j >= 0 && j < N && k_start-1 >= 0 && k_start-1 < N) {
-        in_prev[ty][tx] = u_in[(k_start-1)*N*N + j*N + i];
+        in_prev = u_in[(k_start-1)*N*N + j*N + i];
     }
 
     if (i >= 0 && i < N && j >= 0 && j < N && k_start >= 0 && k_start < N) {
-        in_curr[ty][tx] = u_in[(k_start)*N*N + j*N + i];
+        in_curr = u_in[(k_start)*N*N + j*N + i];
+        in_curr_s[ty][tx] = in_curr;
     }
     
     // Synchronize all threads
@@ -61,7 +63,7 @@ __global__ void stencilTiled(float* u_in, float* u_out, int N) {
     
     for (int k = k_start; k < k_start + OUT_TILE_DIM; k++) {
         if (i >= 0 && i < N && j >= 0 && j < N && k+1 >= 0 && k+1 < N) {
-            in_next[ty][tx] = u_in[(k+1)*N*N + j*N + i];
+            in_next = u_in[(k+1)*N*N + j*N + i];
         }
         __syncthreads();
     
@@ -70,19 +72,20 @@ __global__ void stencilTiled(float* u_in, float* u_out, int N) {
         ty >= RADIUS && ty < OUT_TILE_DIM + RADIUS &&
         i >= 1 && i < N-1 && j >= 1 && j < N-1 && k >= 1 && k < N-1) {
         
-        u_out[k*N*N + j*N + i] =  c0 * in_curr[ty][tx]
-                                + c1 * in_curr[ty][tx-1]         // i-1
-                                + c2 * in_curr[ty][tx+1]           // i+1
-                                + c3 * in_curr[ty-1][tx]         // j-1
-                                + c4 * in_curr[ty+1][tx]        // j+1
-                                + c5 * in_prev[ty][tx]          // k-1
-                                + c6 * in_next[ty][tx];         // k+1
+        u_out[k*N*N + j*N + i] =  c0 * in_curr_s[ty][tx]
+                                + c1 * in_curr_s[ty][tx-1]         // i-1
+                                + c2 * in_curr_s[ty][tx+1]           // i+1
+                                + c3 * in_curr_s[ty-1][tx]         // j-1
+                                + c4 * in_curr_s[ty+1][tx]        // j+1
+                                + c5 * in_prev          // k-1
+                                + c6 * in_next;         // k+1
         
     
     }
     __syncthreads();
-    in_prev[ty][tx] = in_curr[ty][tx];
-    in_curr[ty][tx] = in_next[ty][tx];
+    in_prev = in_curr;
+    in_curr = in_next;
+    in_curr_s[ty][tx] = in_next;
     }
 }
 
