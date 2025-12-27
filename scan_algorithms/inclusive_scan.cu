@@ -5,7 +5,7 @@
 
 
 // Koge stone segmented scan implementation
-__global__ void segmentedScanKernel(const int* input, int* output, const int* flags, int n) {
+__global__ void segmentedScanKernel(const int* input, int* output, int n) {
     extern __shared__ int shared[];
     int tid = threadIdx.x;
     int gid = blockIdx.x * blockDim.x + tid;
@@ -16,7 +16,7 @@ __global__ void segmentedScanKernel(const int* input, int* output, const int* fl
 
         for (int offset = 1; offset < blockDim.x; offset *= 2) {
             int val = 0;
-            if (tid >= offset && flags[gid - offset] == 0) {
+            if (tid >= offset) {
                 val = shared[tid - offset];
             }
             __syncthreads();
@@ -29,30 +29,26 @@ __global__ void segmentedScanKernel(const int* input, int* output, const int* fl
 }
 
 // Host function to launch the segmented scan kernel
-void segmentedScan(const std::vector<int>& input, const std::vector<int>& flags, std::vector<int>& output) {
-    int *d_input, *d_output, *d_flags;
+void segmentedScan(const std::vector<int>& input, std::vector<int>& output) {
+    int *d_input, *d_output;
     int n = input.size();
     size_t size = n * sizeof(int);
     cudaMalloc(&d_input, size);
     cudaMalloc(&d_output, size);
-    cudaMalloc(&d_flags, size);
     cudaMemcpy(d_input, input.data(), size, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_flags, flags.data(), size, cudaMemcpyHostToDevice);
     int blockSize = 256;
     int numBlocks = (n + blockSize - 1) / blockSize;
-    segmentedScanKernel<<<numBlocks, blockSize, blockSize * sizeof(int)>>>(d_input, d_output, d_flags, n);
+    segmentedScanKernel<<<numBlocks, blockSize, blockSize * sizeof(int)>>>(d_input, d_output, n);
     cudaMemcpy(output.data(), d_output, size, cudaMemcpyDeviceToHost);
     cudaFree(d_input);
     cudaFree(d_output);
-    cudaFree(d_flags);
 }
 
 int main() {
     std::vector<int> input = {1, 2, 3, 4, 5, 6, 7, 8};
-    std::vector<int> flags = {0, 0, 1, 0, 0, 1, 0, 0}; // Segment flags
     std::vector<int> output(input.size());
 
-    segmentedScan(input, flags, output);
+    segmentedScan(input, output);
 
     std::cout << "Segmented Scan Output: ";
     for (const auto& val : output) {
