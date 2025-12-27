@@ -6,3 +6,6 @@ gpu_mode_notes/
 doubts.txt
 **/*exe*
 
+# temporary
+/flash*
+*.ipynb
