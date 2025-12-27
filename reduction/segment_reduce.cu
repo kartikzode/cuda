@@ -5,27 +5,25 @@
 
 __global__ void SharedMemoryReduction(float* input, float* output, int n) {
     __shared__ float input_s[BLOCK_DIM]; 
-    unsigned int idx = blockIdx.x * blockDim.x + threadIdx.x; // global index
-    unsigned int t = threadIdx.x; // index within a block
+    unsigned int segment = 2* blockDim.x * blockIdx.x;
+    unsigned int idx = segment + threadIdx.x; // global index
+    unsigned int t = threadIdx.x; // index within tile
 
     // Load elements into shared memory
-    if (idx < n) {
-        input_s[t] = input[idx];
-    } else {
-        input_s[t] = 0.0f;
-    }
-    __syncthreads();
+    float val1 = (idx < n) ? input[idx] : 0.0f;
+    float val2 = (idx + blockDim.x < n) ? input[idx + blockDim.x] : 0.0f;
+    input_s[t] = val1 + val2;
+
 
     // Reduction in shared memory
-    for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
-        if (t < stride && idx + stride < n) {
+    for (unsigned int stride = blockDim.x / 2; stride >= 1; stride >>= 1) {
+        __syncthreads();
+        if (t < stride) {
             input_s[t] += input_s[t + stride];
         }
-        __syncthreads();
     }
 
-    // Reduction across blocks in global memory
-    // needs to be atomic to avoid contention
+    // Reduction across blocks using atomic add
     if (t == 0) {
         atomicAdd(output, input_s[0]);
     }
@@ -33,7 +31,7 @@ __global__ void SharedMemoryReduction(float* input, float* output, int n) {
 
 int main() {
     // Size of the input data
-    const int size = 100000;
+    const int size = 1<<20;
     const int bytes = size * sizeof(float);
 
     // Allocate memory for input and output on host
@@ -58,7 +56,8 @@ int main() {
     cudaMemcpy(d_input, h_input, bytes, cudaMemcpyHostToDevice);
 
     // Launch the kernel
-    int numBlocks = (size + BLOCK_DIM - 1) / BLOCK_DIM;
+    int eff_coverage = 2*BLOCK_DIM;
+    int numBlocks = (size + eff_coverage - 1) / eff_coverage;
     SharedMemoryReduction<<<numBlocks, BLOCK_DIM>>>(d_input, d_output, size);
 
     // Copy result back to host

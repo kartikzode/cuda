@@ -3,8 +3,6 @@
 
 #define BLOCK_DIM 1024
 
-// This is the code from the book but I couldn't get this to run faster even with occupancy calculator
-// L1 throughput is dramatically increased though
 __global__ void SharedMemoryReduction(float* input, float* output) {
     __shared__ float input_s[BLOCK_DIM];
     unsigned int t = threadIdx.x;
