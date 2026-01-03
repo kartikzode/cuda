@@ -1,7 +1,7 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 
-#define BLOCK_SIZE 1024
+#define BLOCK_SIZE 32
 
 __global__ void sgemm_coalesced(int M, int N, int K, float alpha, const float *A,
                             const float *B, float beta, float *C) {
