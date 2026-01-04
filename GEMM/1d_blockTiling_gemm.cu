@@ -11,8 +11,7 @@ __global__ void sgemm_1d_blockTiling(int M, int N, int K, float alpha,
     const uint cRow = blockIdx.y;
     const uint cCol = blockIdx.x;
     
-    // Number of threads in one block is equal to the the number of elements in one tile of B
-    // One to One mapping from thread block to B tile.
+    
     const uint threadCol = threadIdx.x % BN;
     const uint threadRow = threadIdx.x / BN;
 
