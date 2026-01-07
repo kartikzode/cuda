@@ -5,7 +5,7 @@
 
 // GEMM Kernel with 1D block tiling
 template<const int BM, const int BN, const int BK, const int TM, const int TN>
-__global__ void sgemm_1d_blockTiling(int M, int N, int K, float alpha,
+__global__ void sgemm_2d_blockTiling(int M, int N, int K, float alpha,
         const float *A, const float *B, float beta, float *C) {
                                         
     const uint cRow = blockIdx.y;
@@ -28,7 +28,7 @@ __global__ void sgemm_1d_blockTiling(int M, int N, int K, float alpha,
     
     const uint innerColA = threadIdx.x % BK;
     const uint innerRowA = threadIdx.x / BK;
-        const uint innerColB = threadIdx.x % BN;
+    const uint innerColB = threadIdx.x % BN;
     const uint innerRowB = threadIdx.x / BN;
     // since we have numThreads (64) for loading A_tile (BM*BK) into Asub and B_tile (BK*BN) into Bsub
     // it will be done inside a for loop that will have a stride equal to the number of rows 
